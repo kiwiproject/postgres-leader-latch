@@ -86,7 +86,9 @@ final class PgLockGateway implements LockGateway {
 
         this.connectionSupplier = requireNotNull(connectionSupplier, "connectionSupplier must not be null");
         requireNotNull(configuration, "configuration must not be null");
-        requireNotBlank(participantId, "participantId must not be blank");
+        // The only non-constant text in any SQL this class runs is the comment built from the participant ID, so
+        // enforce here that it cannot end or nest a comment, even though the latch has already checked it.
+        ParticipantIdentity.validate(participantId);
         this.leadershipKey = requireNotBlank(leadershipKey, "leadershipKey must not be blank");
         this.lockKey = lockKey;
         this.maxConsecutiveValidationFailures = configuration.maxConsecutiveValidationFailures();
@@ -155,7 +157,7 @@ final class PgLockGateway implements LockGateway {
 
     // must be called while holding connectionLock
     private PreparedStatement prepare(String sql) throws SQLException {
-        var statement = ensureConnection().prepareStatement(identityComment + "\n" + sql);
+        var statement = ensureConnection().prepareStatement(identityComment + " " + sql);
         try {
             statement.setQueryTimeout(statementTimeoutSeconds);
             return statement;

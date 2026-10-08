@@ -57,6 +57,29 @@ class PgLockGatewayTest {
     }
 
     @Test
+    void shouldRejectParticipantIdsThatCouldEndOrNestTheIdentityComment() {
+        var config = LeaderLatchConfiguration.defaults();
+
+        assertAll(
+                () -> org.assertj.core.api.Assertions.assertThatIllegalArgumentException()
+                        .isThrownBy(() -> new PgLockGateway(() -> connection, config, "key", 42L, "a*/ DROP TABLE x; /*b")),
+                () -> org.assertj.core.api.Assertions.assertThatIllegalArgumentException()
+                        .isThrownBy(() -> new PgLockGateway(() -> connection, config, "key", 42L, "a/*b"))
+        );
+    }
+
+    @Test
+    void shouldPrefixEveryStatementWithTheIdentityCommentOnTheSameLine() throws SQLException {
+        acquirable();
+
+        gateway.tryAcquire();
+
+        var sql = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(connection).prepareStatement(sql.capture());
+        assertThat(sql.getValue()).startsWith("/* kiwi-leader-latch: svc/1.0/host:8080 */ SELECT");
+    }
+
+    @Test
     void shouldBoundReadsOnTheConnectionSoASilentlyDroppedNetworkIsDetected() throws SQLException {
         acquirable();
 

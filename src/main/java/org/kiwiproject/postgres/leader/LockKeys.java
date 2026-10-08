@@ -2,6 +2,8 @@ package org.kiwiproject.postgres.leader;
 
 import static org.kiwiproject.base.KiwiPreconditions.requireNotBlank;
 
+import lombok.experimental.UtilityClass;
+
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -10,11 +12,8 @@ import java.security.NoSuchAlgorithmException;
 /**
  * Derives the 64-bit Postgres advisory lock key from a leadership key.
  */
-final class LockKeys {
-
-    private LockKeys() {
-        // utility class
-    }
+@UtilityClass
+class LockKeys {
 
     /**
      * Use the first eight bytes of the SHA-256 digest of the UTF-8 bytes of the leadership key,

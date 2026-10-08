@@ -4,6 +4,8 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Objects.isNull;
 import static org.kiwiproject.base.KiwiPreconditions.checkArgumentNotBlank;
 
+import lombok.experimental.UtilityClass;
+
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -17,7 +19,8 @@ import java.util.regex.Pattern;
  * on the latch's connection starts with this comment, the holder of the lock can be identified.
  * {@code application_name} is also set, truncated, as a convenience for people inspecting sessions.
  */
-final class ParticipantIdentity {
+@UtilityClass
+class ParticipantIdentity {
 
     static final String COMMENT_PREFIX = "/* kiwi-leader-latch: ";
     static final String COMMENT_SUFFIX = " */";
@@ -27,10 +30,6 @@ final class ParticipantIdentity {
 
     private static final Pattern COMMENT_PATTERN =
             Pattern.compile(Pattern.quote(COMMENT_PREFIX) + "(.+?)" + Pattern.quote(COMMENT_SUFFIX));
-
-    private ParticipantIdentity() {
-        // utility class
-    }
 
     /**
      * Check a participant ID can be carried in a SQL comment.

@@ -7,7 +7,6 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -136,15 +135,16 @@ class PgLockGatewayTest {
         var lease = gateway.tryAcquire().orElseThrow();
         when(connection.isClosed()).thenReturn(false);
 
-        doThrow(new SQLException("temporary failure")).when(statement).executeQuery();
-        lease.validate();
-
-        doReturn(resultSet).when(statement).executeQuery();
+        // fail, succeed, fail: never two failures in a row, so the lock must stay held
+        when(statement.executeQuery())
+                .thenThrow(new SQLException("temporary failure"))
+                .thenReturn(resultSet)
+                .thenThrow(new SQLException("temporary failure"));
         when(resultSet.getBoolean("in_recovery")).thenReturn(false);
         when(resultSet.getBoolean("holds_lock")).thenReturn(true);
-        lease.validate();
 
-        doThrow(new SQLException("temporary failure")).when(statement).executeQuery();
+        lease.validate();
+        lease.validate();
         lease.validate();
 
         assertThat(lease.isHeld()).isTrue();

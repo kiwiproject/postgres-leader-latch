@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -61,11 +62,15 @@ final class PgLockGateway implements LockGateway {
 
     private static final int MAX_QUERY_TEXT_IN_MESSAGE = 200;
 
+    // Extra time beyond the statement timeout for the server's response, e.g. to a cancel, to arrive
+    private static final int NETWORK_TIMEOUT_MARGIN_MILLIS = 2_000;
+
     private final Supplier<Connection> connectionSupplier;
     private final String leadershipKey;
     private final long lockKey;
     private final int maxConsecutiveValidationFailures;
     private final int statementTimeoutSeconds;
+    private final int networkTimeoutMillis;
     private final String identityComment;
     private final String applicationName;
     private final Object connectionLock = new Object();
@@ -86,6 +91,7 @@ final class PgLockGateway implements LockGateway {
         this.lockKey = lockKey;
         this.maxConsecutiveValidationFailures = configuration.maxConsecutiveValidationFailures();
         this.statementTimeoutSeconds = (int) Math.max(1, (configuration.validationTimeout().toMillis() + 999) / 1000);
+        this.networkTimeoutMillis = statementTimeoutSeconds * 1000 + NETWORK_TIMEOUT_MARGIN_MILLIS;
         this.identityComment = ParticipantIdentity.comment(participantId);
         this.applicationName = ParticipantIdentity.applicationName(participantId);
     }
@@ -173,6 +179,7 @@ final class PgLockGateway implements LockGateway {
         try {
             newConnection.setAutoCommit(true);
             newConnection.setClientInfo("ApplicationName", applicationName);
+            setNetworkTimeout(newConnection);
         } catch (SQLException e) {
             closeQuietly(newConnection);
             throw e;
@@ -180,6 +187,21 @@ final class PgLockGateway implements LockGateway {
 
         connection = newConnection;
         return newConnection;
+    }
+
+    /**
+     * Bound how long any read on the connection can block. Without this, and without a {@code socketTimeout}
+     * set by the caller, a connection whose network silently drops (no reset, no close) blocks the validation
+     * forever, so the leader would never stop believing it leads.
+     */
+    private void setNetworkTimeout(Connection newConnection) throws SQLException {
+        try {
+            // the driver performs the timeout itself; the executor is not needed
+            newConnection.setNetworkTimeout(Runnable::run, networkTimeoutMillis);
+        } catch (SQLFeatureNotSupportedException e) {
+            LOG.warn("The JDBC driver does not support setNetworkTimeout. Set a socket timeout when creating the"
+                    + " connection, or a leader on a silently dropped connection will not step down.", e);
+        }
     }
 
     // must be called while holding connectionLock
@@ -230,7 +252,10 @@ final class PgLockGateway implements LockGateway {
                     validateLocked();
                 } catch (SQLException | RuntimeException e) {
                     ++consecutiveFailures;
-                    if (consecutiveFailures >= maxConsecutiveValidationFailures) {
+                    if (isConnectionClosed()) {
+                        // A closed connection (for example after a network timeout) cannot recover by waiting
+                        lose("validation failed and the connection is now closed", e);
+                    } else if (consecutiveFailures >= maxConsecutiveValidationFailures) {
                         lose("validation failed " + consecutiveFailures + " times in a row", e);
                     } else {
                         LOG.warn("Validation failed for key {} ({} of {} allowed); still treating the lock as held",
@@ -259,6 +284,15 @@ final class PgLockGateway implements LockGateway {
                         consecutiveFailures = 0;
                     }
                 }
+            }
+        }
+
+        // must be called while holding connectionLock
+        private boolean isConnectionClosed() {
+            try {
+                return isNull(connection) || connection.isClosed();
+            } catch (SQLException e) {
+                return true;
             }
         }
 

@@ -98,9 +98,13 @@ not been tuned. `latch.getLockKey()` returns the numeric key, which is how the l
 * **Connect to the primary (writer) endpoint directly.** Advisory locks are per server, so a latch connected to a read
   replica or standby refuses to lead (the validation checks `pg_is_in_recovery()`). Do not connect through PgBouncer in
   transaction-pooling mode or a proxy that does not preserve the session; session-level locks need a stable session.
-* **Configure the connection you return from the supplier.** Set `connectTimeout`, `socketTimeout` and `tcpKeepAlive`
-  (or the equivalent for your driver) so a dead connection is noticed quickly. Postgres itself only notices a dead client
-  after its own TCP keepalive settings expire, and until it does the lock is still held.
+* **Configure the connection you return from the supplier.** Set `connectTimeout` and `tcpKeepAlive` (or the
+  equivalent for your driver). The latch itself bounds every read on its connection with
+  `Connection.setNetworkTimeout` (the validation timeout plus two seconds), so a network that silently drops traffic
+  is detected even if you set no `socketTimeout`. With the default settings a leader behind a blackholed network
+  stopped reporting leadership after about 18 seconds in a local test. Postgres itself only notices a dead client after
+  its own TCP keepalive settings expire, and until it does the lock is still held, so another instance cannot take over
+  before then.
 * **After a database failover** the old session's lock disappears and a follower reconnects to the new primary. Keep the
   JVM's DNS cache TTL low (`networkaddress.cache.ttl`) so reconnects follow the endpoint.
 * **Connections:** one extra connection per instance, in addition to your application pool. Count them against

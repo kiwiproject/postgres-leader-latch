@@ -98,6 +98,9 @@ not been tuned. `latch.getLockKey()` returns the numeric key, which is how the l
 * **Connect to the primary (writer) endpoint directly.** Advisory locks are per server, so a latch connected to a read
   replica or standby refuses to lead (the validation checks `pg_is_in_recovery()`). Do not connect through PgBouncer in
   transaction-pooling mode or a proxy that does not preserve the session; session-level locks need a stable session.
+  AWS documents that RDS Proxy pins a client connection to one database connection when it takes a session-level advisory
+  lock, which keeps the lock valid but means the proxy gives no pooling benefit for this connection. Connecting directly
+  is still recommended. Behavior through RDS Proxy has not been tested with this library.
 * **Configure the connection you return from the supplier.** Set `connectTimeout` and `tcpKeepAlive` (or the
   equivalent for your driver). The latch itself bounds every read on its connection with
   `Connection.setNetworkTimeout` (the validation timeout plus two seconds), so a network that silently drops traffic

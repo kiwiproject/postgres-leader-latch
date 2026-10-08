@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
@@ -70,7 +71,7 @@ class PostgresLeaderLatchIntegrationTest {
         var follower = leader == first ? second : first;
 
         assertAll(
-                () -> assertThat(leader.getId().getBytes().length).isGreaterThan(63),
+                () -> assertThat(leader.getId().getBytes(StandardCharsets.UTF_8)).hasSizeGreaterThan(63),
                 () -> assertThat(follower.hasLeadership()).isFalse(),
                 () -> assertThat(leader.getLeader()).isInstanceOfSatisfying(LeaderInfo.Leader.class,
                         info -> assertThat(info.participantId()).isEqualTo(leader.getId())),

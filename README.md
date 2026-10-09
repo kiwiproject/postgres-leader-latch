@@ -43,7 +43,7 @@ Add the dependency:
 <dependency>
     <groupId>org.kiwiproject</groupId>
     <artifactId>postgres-leader-latch</artifactId>
-    <version>0.1.0</version>
+    <version>[current-version]</version>
 </dependency>
 ```
 

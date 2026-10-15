@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.kiwiproject</groupId>
         <artifactId>kiwi-parent</artifactId>
-        <version>3.0.44</version>
+        <version>3.0.45</version>
     </parent>
 
     <artifactId>postgres-leader-latch</artifactId>
@@ -31,7 +31,7 @@
 
         <!-- Versions for required dependencies -->
         <kiwi.version>5.4.0</kiwi.version>
-        <kiwi-bom.version>3.3.4</kiwi-bom.version>
+        <kiwi-bom.version>3.3.5</kiwi-bom.version>
 
         <!-- Versions for test dependencies -->
         <kiwi-test.version>4.3.0</kiwi-test.version>

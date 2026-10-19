@@ -79,6 +79,31 @@ latch.close();   // releases the lock and closes the connection
 
 The participant ID is carried in a SQL comment, so it must not contain `/*`, `*/`, or control characters.
 
+## Configuring the connection
+
+The latch never opens a connection itself. It calls your `Supplier<Connection>` when it starts and each time it needs a
+replacement, so everything that has to be decided *when the connection is opened* is yours to set: the driver, SSL, how
+credentials are obtained (for example generating a fresh IAM auth token on each call), and the connect timeout. Return a
+dedicated, unpooled connection to the primary (writer) endpoint, never one borrowed from your application's pool, because
+the latch closes every connection it obtains.
+
+The sample uses these PostgreSQL JDBC driver (pgjdbc) properties. They are driver-specific; for another driver, use its
+equivalents:
+
+| Property | Units | Meaning |
+|---|---|---|
+| `connectTimeout` | seconds | How long to wait while establishing the connection; `0` means no limit. Without it, a reconnect attempt to an unreachable host can block the latch thread for a long time. |
+| `tcpKeepAlive` | boolean | Enables TCP keepalive on the client socket so the OS can eventually detect a dead peer. How soon depends on the operating system's keepalive settings, which commonly default to hours, so this is a backstop and not the latch's failure detection. Its effect has not been measured with this library. |
+| `socketTimeout` | seconds | Optional. The latch sets `Connection.setNetworkTimeout` itself after connecting (the validation timeout plus two seconds), so you do not need it for leader validation. If you set it anyway, keep it longer than `validationTimeout`. |
+
+These properties can go in the JDBC URL or in the `Properties` passed to `DriverManager.getConnection`.
+
+The latch decides the following itself and does not depend on how you configured the connection: autocommit, the
+`application_name`, the network timeout above, and the participant identity comment on every statement. Failure
+detection comes from the validation settings in [Configuration](#configuration) together with that network timeout. The
+database side is separate: Postgres releases the lock only when it notices the session is gone, which depends on its own
+TCP keepalive settings (see the deployment notes below).
+
 ## Configuration
 
 | Setting | Default | Meaning |
@@ -101,8 +126,8 @@ not been tuned. `latch.getLockKey()` returns the numeric key, which is how the l
   AWS documents that RDS Proxy pins a client connection to one database connection when it takes a session-level advisory
   lock, which keeps the lock valid but means the proxy gives no pooling benefit for this connection. Connecting directly
   is still recommended. Behavior through RDS Proxy has not been tested with this library.
-* **Configure the connection you return from the supplier.** Set `connectTimeout` and `tcpKeepAlive` (or the
-  equivalent for your driver). The latch itself bounds every read on its connection with
+* **Configure the connection you return from the supplier** (see
+  [Configuring the connection](#configuring-the-connection)). The latch bounds every read on its connection with
   `Connection.setNetworkTimeout` (the validation timeout plus two seconds), so a network that silently drops traffic
   is detected even if you set no `socketTimeout`. With the default settings a leader behind a blackholed network
   stopped reporting leadership after about 18 seconds in a local test. Postgres itself only notices a dead client after
